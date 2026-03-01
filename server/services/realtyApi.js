@@ -1,7 +1,7 @@
 const axios = require('axios');
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST;
+const RAPIDAPI_KEY = (process.env.RAPIDAPI_KEY || '').trim();
+const RAPIDAPI_HOST = (process.env.RAPIDAPI_HOST || '').trim();
 const BASE_URL = `https://${RAPIDAPI_HOST}`;
 
 async function searchProperties(params) {
