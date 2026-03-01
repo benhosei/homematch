@@ -67,12 +67,48 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     env_check: {
       has_rapidapi_key: !!process.env.RAPIDAPI_KEY,
+      rapidapi_key_length: (process.env.RAPIDAPI_KEY || '').length,
       has_rapidapi_host: !!process.env.RAPIDAPI_HOST,
+      rapidapi_host: process.env.RAPIDAPI_HOST || 'NOT SET',
       node_env: process.env.NODE_ENV || 'NOT SET',
       firebase: !!userDataRouter,
       notifications: !!notifyRouter,
     },
   });
+});
+
+// Temporary debug endpoint — remove after deployment is verified
+app.get('/api/debug-search', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const body = {
+      limit: 2, offset: 0,
+      city: 'Fishers', state_code: 'IN',
+      status: ['for_sale'],
+      sort: { direction: 'desc', field: 'list_date' },
+    };
+    const response = await axios.post(
+      `https://${process.env.RAPIDAPI_HOST}/properties/v3/list`,
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+          'X-RapidAPI-Host': process.env.RAPIDAPI_HOST,
+        },
+        timeout: 15000,
+      }
+    );
+    const total = response.data?.data?.home_search?.total || 0;
+    const count = response.data?.data?.home_search?.results?.length || 0;
+    res.json({ success: true, total, count });
+  } catch (err) {
+    res.json({
+      success: false,
+      status: err.response?.status,
+      error: err.response?.data || err.message,
+    });
+  }
 });
 
 app.listen(PORT, () => {
