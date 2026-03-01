@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+// ─── Core routes (always available) ────────────────────────────────
 const listingsRouter = require('./routes/listings');
 const assistantRouter = require('./routes/assistant');
 const locationRouter = require('./routes/location');
@@ -11,10 +12,24 @@ const intentRouter = require('./routes/intent');
 const financeRouter = require('./routes/finance');
 const moveRouter = require('./routes/move');
 const leadsRouter = require('./routes/leads');
-const userDataRouter = require('./routes/userData');
 const visionRouter = require('./routes/vision');
 const agentTrackingRouter = require('./routes/agentTracking');
-const notifyRouter = require('./routes/notifications');
+
+// ─── Optional routes (depend on Firebase / Stripe) ─────────────────
+let userDataRouter = null;
+let notifyRouter = null;
+
+try {
+  userDataRouter = require('./routes/userData');
+} catch (err) {
+  console.warn('[BOOT] userData routes disabled:', err.message);
+}
+
+try {
+  notifyRouter = require('./routes/notifications');
+} catch (err) {
+  console.warn('[BOOT] notification routes disabled:', err.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,6 +46,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// ─── Mount routes ──────────────────────────────────────────────────
 app.use('/api/listings', listingsRouter);
 app.use('/api/assistant', assistantRouter);
 app.use('/api/location', locationRouter);
@@ -39,21 +55,22 @@ app.use('/api/intent', intentRouter);
 app.use('/api/finance', financeRouter);
 app.use('/api/move', moveRouter);
 app.use('/api/leads', leadsRouter);
-app.use('/api/user', userDataRouter);
 app.use('/api/vision', visionRouter);
 app.use('/api/tracking', agentTrackingRouter);
-app.use('/api/notify', notifyRouter);
 
+if (userDataRouter) app.use('/api/user', userDataRouter);
+if (notifyRouter) app.use('/api/notify', notifyRouter);
+
+// ─── Health check ──────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     env_check: {
       has_rapidapi_key: !!process.env.RAPIDAPI_KEY,
-      key_length: (process.env.RAPIDAPI_KEY || '').length,
-      key_start: (process.env.RAPIDAPI_KEY || '').substring(0, 6),
       has_rapidapi_host: !!process.env.RAPIDAPI_HOST,
-      host: process.env.RAPIDAPI_HOST || 'NOT SET',
       node_env: process.env.NODE_ENV || 'NOT SET',
+      firebase: !!userDataRouter,
+      notifications: !!notifyRouter,
     },
   });
 });

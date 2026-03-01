@@ -3,6 +3,10 @@ const router = express.Router();
 const admin = require('../firebase-admin');
 const requireAuth = require('../middleware/requireAuth');
 
+if (!admin._firebaseReady) {
+  throw new Error('Firebase not configured — userData routes disabled');
+}
+
 const db = admin.firestore();
 
 // GET /api/user/data — Load all user data

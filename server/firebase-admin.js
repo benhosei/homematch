@@ -1,28 +1,29 @@
 const admin = require('firebase-admin');
 
 // Initialize Firebase Admin SDK
-// Expects GOOGLE_APPLICATION_CREDENTIALS env var pointing to serviceAccountKey.json
-// OR you can directly pass the service account key:
-//   admin.initializeApp({ credential: admin.credential.cert(require('./serviceAccountKey.json')) });
+// Supports: FIREBASE_SERVICE_ACCOUNT env var (JSON string) OR serviceAccountKey.json file
+// If neither is available, Firebase features are disabled (server still starts).
+
+let firebaseReady = false;
 
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Parse from env var (useful for deployment)
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    firebaseReady = true;
+    console.log('[FIREBASE] Initialized from FIREBASE_SERVICE_ACCOUNT env var');
   } else {
-    // Use service account key file
     const serviceAccount = require('./serviceAccountKey.json');
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    firebaseReady = true;
+    console.log('[FIREBASE] Initialized from serviceAccountKey.json');
   }
 } catch (err) {
-  console.warn('Firebase Admin SDK init failed:', err.message);
-  console.warn('User data sync will not work until Firebase is configured.');
-  console.warn('Place your serviceAccountKey.json in the server/ directory.');
-  // Initialize without credentials so the server still starts
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
+  console.warn('[FIREBASE] Not configured:', err.message);
+  console.warn('[FIREBASE] User data sync disabled. Set FIREBASE_SERVICE_ACCOUNT env var or add serviceAccountKey.json.');
+  // Do NOT call admin.initializeApp() without credentials — it tries Google
+  // metadata server which hangs/crashes on non-Google hosts (Railway, Render, etc.)
 }
 
+admin._firebaseReady = firebaseReady;
 module.exports = admin;
