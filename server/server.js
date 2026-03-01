@@ -45,7 +45,17 @@ app.use('/api/tracking', agentTrackingRouter);
 app.use('/api/notify', notifyRouter);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    env_check: {
+      has_rapidapi_key: !!process.env.RAPIDAPI_KEY,
+      key_length: (process.env.RAPIDAPI_KEY || '').length,
+      key_start: (process.env.RAPIDAPI_KEY || '').substring(0, 6),
+      has_rapidapi_host: !!process.env.RAPIDAPI_HOST,
+      host: process.env.RAPIDAPI_HOST || 'NOT SET',
+      node_env: process.env.NODE_ENV || 'NOT SET',
+    },
+  });
 });
 
 app.listen(PORT, () => {
