@@ -1,0 +1,1983 @@
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
+import { calculateMaxBudget, getFullMonthlyBreakdown } from '../services/affordability';
+import { calculateReadinessScore, generateReadinessInsights } from '../services/readiness';
+import { generateMatchExplanation, generateBadges, generateOfferStrength } from '../services/aiExplanations';
+import { matchAgents } from '../services/agentMatching';
+import { getBuyersLooking } from '../services/mockData';
+import './StartWizard.css';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const STEPS = [
+  { id: 'budget', label: 'Budget', sublabel: 'Know your numbers' },
+  { id: 'match',  label: 'Match',  sublabel: 'Find your home' },
+  { id: 'tour',   label: 'Tour',   sublabel: 'Connect with agents' },
+  { id: 'move',   label: 'Move',   sublabel: 'Plan ahead' },
+];
+
+const CREDIT_RANGES = [
+  { value: 'excellent', label: 'Excellent (750+)' },
+  { value: 'good',      label: 'Good (700-749)' },
+  { value: 'fair',      label: 'Fair (650-699)' },
+  { value: 'poor',      label: 'Poor (<650)' },
+];
+
+const TIMELINE_OPTIONS = [
+  { value: 'asap',       label: 'ASAP' },
+  { value: '1-3months',  label: '1-3 Months' },
+  { value: '3-6months',  label: '3-6 Months' },
+  { value: 'flexible',   label: 'Flexible' },
+];
+
+const TOUR_TIMELINE_OPTIONS = [
+  { value: 'asap',         label: 'ASAP' },
+  { value: '1-2weeks',     label: '1-2 Weeks' },
+  { value: '1month',       label: '1 Month' },
+  { value: 'justbrowsing', label: 'Just Browsing' },
+];
+
+const TIME_SLOTS = [
+  { value: 'morning',   label: 'Morning (9am-12pm)' },
+  { value: 'afternoon', label: 'Afternoon (12pm-4pm)' },
+  { value: 'evening',   label: 'Evening (4pm-7pm)' },
+];
+
+const CLOSING_CHECKLIST = [
+  { id: 'preapproval',   label: 'Pre-Approval',     timeline: 'Week 1',   status: 'pending' },
+  { id: 'inspection',    label: 'Home Inspection',   timeline: 'Week 2',   status: 'pending' },
+  { id: 'appraisal',     label: 'Appraisal',         timeline: 'Week 3',   status: 'pending' },
+  { id: 'finalwalk',     label: 'Final Walkthrough',  timeline: 'Week 4-5', status: 'pending' },
+  { id: 'closing',       label: 'Closing Day',        timeline: 'Week 5-6', status: 'pending' },
+];
+
+const GAUGE_RADIUS = 55;
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (n == null || isNaN(n)) return '--';
+  return '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
+function StartWizard() {
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  // ── Persistent state from localStorage ──
+  const savedState = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hm_wizard_state') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const [currentStep, setCurrentStep] = useState(savedState.currentStep || 0);
+
+  // ── Step 1: Budget State ──
+  const [income, setIncome] = useState(savedState.income || '');
+  const [monthlyDebts, setMonthlyDebts] = useState(savedState.monthlyDebts || '');
+  const [downPayment, setDownPayment] = useState(savedState.downPayment || '');
+  const [interestRate, setInterestRate] = useState(savedState.interestRate || '6.5');
+  const [creditRange, setCreditRange] = useState(savedState.creditRange || 'good');
+  const [timeline, setTimeline] = useState(savedState.timeline || 'flexible');
+  const [budgetCalculated, setBudgetCalculated] = useState(false);
+
+  // Computed budget values
+  const [maxBudget, setMaxBudget] = useState(null);
+  const [monthlyBreakdown, setMonthlyBreakdown] = useState(null);
+  const [readinessScore, setReadinessScore] = useState(null);
+  const [readinessInsights, setReadinessInsights] = useState([]);
+
+  // ── Step 2: Match State ──
+  const [city, setCity] = useState(savedState.city || '');
+  const [state, setState] = useState(savedState.state || '');
+  const [beds, setBeds] = useState(savedState.beds || '');
+  const [baths, setBaths] = useState(savedState.baths || '');
+  const [matchResults, setMatchResults] = useState([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [selectedListings, setSelectedListings] = useState(savedState.selectedListings || []);
+  const [compareMode, setCompareMode] = useState(false);
+  const [quickViewListing, setQuickViewListing] = useState(null);
+
+  // ── Step 3: Tour State ──
+  const [tourForm, setTourForm] = useState({
+    name: savedState.tourName || '',
+    email: savedState.tourEmail || '',
+    phone: savedState.tourPhone || '',
+    timeline: savedState.tourTimeline || '',
+    preapproved: savedState.tourPreapproved || false,
+    message: savedState.tourMessage || '',
+    preferredDate: '',
+    preferredTime: '',
+  });
+  const [tourSubmitting, setTourSubmitting] = useState(false);
+  const [tourSubmitted, setTourSubmitted] = useState(false);
+  const [matchedAgents, setMatchedAgents] = useState([]);
+
+  // ── Step 4: Move State ──
+  const [moveEstimate, setMoveEstimate] = useState(null);
+  const [movePlan, setMovePlan] = useState(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [closingChecklist, setClosingChecklist] = useState(CLOSING_CHECKLIST.map(item => ({ ...item })));
+
+  // ── Persist to localStorage ──
+  useEffect(() => {
+    const stateToSave = {
+      currentStep,
+      income,
+      monthlyDebts,
+      downPayment,
+      interestRate,
+      creditRange,
+      timeline,
+      city,
+      state,
+      beds,
+      baths,
+      selectedListings,
+      tourName: tourForm.name,
+      tourEmail: tourForm.email,
+      tourPhone: tourForm.phone,
+      tourTimeline: tourForm.timeline,
+      tourPreapproved: tourForm.preapproved,
+      tourMessage: tourForm.message,
+    };
+    localStorage.setItem('hm_wizard_state', JSON.stringify(stateToSave));
+  }, [
+    currentStep, income, monthlyDebts, downPayment, interestRate,
+    creditRange, timeline, city, state, beds, baths, selectedListings, tourForm,
+  ]);
+
+  // ── Step navigation ──
+  const goToStep = useCallback((step) => {
+    if (step <= currentStep) setCurrentStep(step);
+  }, [currentStep]);
+
+  const goNext = useCallback(() => {
+    if (currentStep === 0 && !budgetCalculated) {
+      toast.warning('Calculate your budget first');
+      return;
+    }
+    if (currentStep === 1 && selectedListings.length === 0) {
+      toast.warning('Select at least one home');
+      return;
+    }
+    if (currentStep === 3) {
+      navigate('/homes');
+      return;
+    }
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
+  }, [currentStep, budgetCalculated, selectedListings, navigate, toast]);
+
+  const goPrev = useCallback(() => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 1: Budget handlers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handleCalculateBudget = useCallback(() => {
+    const inc = parseFloat(income) || 0;
+    const debts = parseFloat(monthlyDebts) || 0;
+    const dp = parseFloat(downPayment) || 0;
+    const rate = parseFloat(interestRate) || 6.5;
+
+    if (inc <= 0) {
+      toast.warning('Please enter your annual income');
+      return;
+    }
+
+    const max = calculateMaxBudget(inc, debts, dp, rate);
+    setMaxBudget(max);
+
+    const breakdown = getFullMonthlyBreakdown(max, dp > 0 ? (dp / max * 100) : 10, rate);
+    setMonthlyBreakdown(breakdown);
+
+    const score = calculateReadinessScore({
+      annualIncome: inc,
+      monthlyDebts: debts,
+      downPayment: dp,
+      targetPrice: max,
+      creditRange,
+      timeline,
+    });
+    setReadinessScore(score);
+
+    const insights = generateReadinessInsights({
+      score: score.score,
+      breakdown: score.breakdown,
+      annualIncome: inc,
+      monthlyDebts: debts,
+      downPayment: dp,
+      creditRange,
+    });
+    setReadinessInsights(insights);
+    setBudgetCalculated(true);
+    toast.success('Budget analysis complete!');
+  }, [income, monthlyDebts, downPayment, interestRate, creditRange, timeline, toast]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 2: Match handlers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handleMatchSearch = useCallback(async () => {
+    if (!city.trim() || !state.trim()) {
+      toast.warning('Enter a city and state');
+      return;
+    }
+    setMatchLoading(true);
+    try {
+      const resolveRes = await fetch(
+        `/api/location/resolve?q=${encodeURIComponent(`${city.trim()}, ${state.trim()}`)}`
+      );
+      const resolved = await resolveRes.json();
+      const resolvedCity = resolved.city || city.trim();
+      const resolvedState = resolved.stateCode || state.trim();
+
+      const params = new URLSearchParams({ city: resolvedCity, state_code: resolvedState });
+      if (maxBudget) params.set('price_max', maxBudget);
+      if (beds) params.set('beds', beds);
+      if (baths) params.set('baths', baths);
+
+      const searchRes = await fetch(`/api/listings/search?${params}`);
+      const data = await searchRes.json();
+      setMatchResults(data.results || data.listings || []);
+      toast.success(`Found ${(data.results || data.listings || []).length} homes!`);
+    } catch (err) {
+      toast.error('Search failed -- try again.');
+    } finally {
+      setMatchLoading(false);
+    }
+  }, [city, state, beds, baths, maxBudget, toast]);
+
+  const toggleListing = useCallback((listing) => {
+    setSelectedListings((prev) => {
+      const exists = prev.find((l) => l.property_id === listing.property_id);
+      if (exists) return prev.filter((l) => l.property_id !== listing.property_id);
+      if (prev.length >= 3 && !exists) {
+        toast.warning('Max 3 homes for comparison');
+        return prev;
+      }
+      return [...prev, listing];
+    });
+  }, [toast]);
+
+  const isSelected = useCallback(
+    (listing) => selectedListings.some((l) => l.property_id === listing.property_id),
+    [selectedListings]
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 3: Tour handlers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (currentStep === 2) {
+      const agents = matchAgents({
+        city: city,
+        priceRange: maxBudget > 500000 ? 'luxury' : maxBudget > 200000 ? 'medium' : 'budget',
+        timeline: timeline,
+        buyerType: 'first-time',
+      });
+      setMatchedAgents(agents);
+    }
+  }, [currentStep, city, maxBudget, timeline]);
+
+  const updateTourField = useCallback((field, value) => {
+    setTourForm((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const handleTourSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    if (!tourForm.email) {
+      toast.warning('Email is required');
+      return;
+    }
+    setTourSubmitting(true);
+    try {
+      const res = await fetch('/api/leads/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buyerName: tourForm.name,
+          buyerEmail: tourForm.email,
+          buyerPhone: tourForm.phone,
+          timeline: tourForm.timeline,
+          preapproved: tourForm.preapproved,
+          message: tourForm.message,
+          preferredDate: tourForm.preferredDate,
+          preferredTime: tourForm.preferredTime,
+          selectedListings: selectedListings.map((l) => ({
+            property_id: l.property_id,
+            address: l.address?.full,
+            price: l.price,
+          })),
+          source: 'wizard',
+        }),
+      });
+      if (res.ok) {
+        setTourSubmitted(true);
+        toast.success('Tour requested! An agent will reach out soon.');
+      }
+    } catch {
+      toast.error('Failed to submit -- try again.');
+    } finally {
+      setTourSubmitting(false);
+    }
+  }, [tourForm, selectedListings, toast]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 4: Move handlers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (currentStep === 3 && !moveEstimate) {
+      setMoveLoading(true);
+      Promise.all([
+        fetch('/api/move/estimate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origin: { zip: '00000' },
+            destination: { zip: '00000' },
+            homeSize: { bedrooms: 3, sqft: 2000 },
+            date: 'next month',
+          }),
+        }).then((r) => r.json()).catch(() => null),
+        fetch('/api/move/plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            moveDate: '2025-06-01',
+            householdSize: 2,
+            pets: false,
+            specialItems: [],
+          }),
+        }).then((r) => r.json()).catch(() => null),
+      ]).then(([est, plan]) => {
+        setMoveEstimate(est);
+        setMovePlan(plan);
+        setMoveLoading(false);
+      });
+    }
+  }, [currentStep, moveEstimate]);
+
+  const toggleClosingItem = useCallback((id) => {
+    setClosingChecklist((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, status: item.status === 'completed' ? 'pending' : 'completed' }
+          : item
+      )
+    );
+  }, []);
+
+  const closingProgress = useMemo(() => {
+    const done = closingChecklist.filter((c) => c.status === 'completed').length;
+    return Math.round((done / closingChecklist.length) * 100);
+  }, [closingChecklist]);
+
+  const handleCopyShareLink = useCallback(() => {
+    const fakeUrl = `https://homematch.io/share/${Date.now().toString(36)}`;
+    navigator.clipboard.writeText(fakeUrl).then(() => {
+      toast.success('Share link copied to clipboard!');
+    }).catch(() => {
+      toast.success('Share link: ' + fakeUrl);
+    });
+  }, [toast]);
+
+  // ── Derived values ──
+  const firstSelected = selectedListings.length > 0 ? selectedListings[0] : null;
+
+  const offerStrength = useMemo(() => {
+    if (!firstSelected || !maxBudget) return null;
+    try {
+      return generateOfferStrength({
+        listingPrice: firstSelected.price,
+        maxBudget: maxBudget,
+        downPaymentPercent: downPayment && maxBudget ? (parseFloat(downPayment) / maxBudget * 100) : 10,
+        creditRange: creditRange,
+        preapproved: tourForm.preapproved,
+        timeline: timeline,
+      });
+    } catch {
+      return null;
+    }
+  }, [firstSelected, maxBudget, downPayment, creditRange, tourForm.preapproved, timeline]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
+
+  return (
+    <div className="sw-page page-enter">
+      {/* ═══ STEPPER ═══ */}
+      <div className="sw-stepper">
+        <div className="sw-stepper-inner">
+          {STEPS.map((step, i) => (
+            <React.Fragment key={step.id}>
+              {i > 0 && (
+                <div className={`sw-connector ${i <= currentStep ? 'done' : ''}`} />
+              )}
+              <button
+                className={`sw-step ${i === currentStep ? 'active' : ''} ${i < currentStep ? 'completed' : ''} ${i > currentStep ? 'locked' : ''}`}
+                onClick={() => goToStep(i)}
+                type="button"
+                aria-label={`Step ${i + 1}: ${step.label}`}
+                aria-current={i === currentStep ? 'step' : undefined}
+              >
+                <div className="sw-step-dot">
+                  {i < currentStep ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                <div className="sw-step-info">
+                  <span className="sw-step-label">{step.label}</span>
+                  <span className="sw-step-sub">{step.sublabel}</span>
+                </div>
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ CONTENT ═══ */}
+      <div className="sw-content" key={currentStep}>
+
+        {/* ─────────────────────────────────────────────────────────────────────
+            STEP 1: BUDGET (Financial Readiness Score)
+            ───────────────────────────────────────────────────────────────────── */}
+        {currentStep === 0 && (
+          <>
+            <div className="sw-header">
+              <h2>Set Your Budget</h2>
+              <p>Enter your financial details to get your personalized readiness score</p>
+            </div>
+
+            <div className="sw-two-col">
+              {/* ── LEFT: Budget Calculator Card ── */}
+              <div className="sw-card">
+                <h3>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                  </svg>
+                  Budget Calculator
+                </h3>
+                <p className="sw-card-desc">Find out what you can comfortably afford</p>
+
+                <div className="sw-form-grid">
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-income">Annual Income</label>
+                    <div className="sw-input-prefix-wrap">
+                      <span className="sw-input-prefix">$</span>
+                      <input
+                        id="sw-income"
+                        className="input-field"
+                        type="number"
+                        value={income}
+                        onChange={(e) => setIncome(e.target.value)}
+                        placeholder="75,000"
+                        aria-label="Annual household income"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-debts">
+                      Monthly Debts
+                      <span
+                        className="sw-tooltip-trigger"
+                        data-tooltip="Debt-to-Income ratio. Lenders prefer under 36%"
+                        aria-label="DTI info"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 16v-4M12 8h.01" />
+                        </svg>
+                      </span>
+                    </label>
+                    <div className="sw-input-prefix-wrap">
+                      <span className="sw-input-prefix">$</span>
+                      <input
+                        id="sw-debts"
+                        className="input-field"
+                        type="number"
+                        value={monthlyDebts}
+                        onChange={(e) => setMonthlyDebts(e.target.value)}
+                        placeholder="500"
+                        aria-label="Total monthly debt payments"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-downpayment">Down Payment</label>
+                    <div className="sw-input-prefix-wrap">
+                      <span className="sw-input-prefix">$</span>
+                      <input
+                        id="sw-downpayment"
+                        className="input-field"
+                        type="number"
+                        value={downPayment}
+                        onChange={(e) => setDownPayment(e.target.value)}
+                        placeholder="30,000"
+                        aria-label="Down payment amount"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-rate">
+                      Interest Rate: {interestRate}%
+                    </label>
+                    <input
+                      id="sw-rate"
+                      type="range"
+                      className="sw-slider"
+                      min="3"
+                      max="9"
+                      step="0.1"
+                      value={interestRate}
+                      onChange={(e) => setInterestRate(e.target.value)}
+                      aria-label="Mortgage interest rate"
+                    />
+                    <div className="sw-slider-labels">
+                      <span>3%</span>
+                      <span>{interestRate}%</span>
+                      <span>9%</span>
+                    </div>
+                  </div>
+
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-credit">Credit Range</label>
+                    <select
+                      id="sw-credit"
+                      className="input-field"
+                      value={creditRange}
+                      onChange={(e) => setCreditRange(e.target.value)}
+                      aria-label="Credit score range"
+                    >
+                      {CREDIT_RANGES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sw-field">
+                    <label className="input-label" htmlFor="sw-timeline">Timeline</label>
+                    <select
+                      id="sw-timeline"
+                      className="input-field"
+                      value={timeline}
+                      onChange={(e) => setTimeline(e.target.value)}
+                      aria-label="Buying timeline"
+                    >
+                      {TIMELINE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  className="btn btn-gradient"
+                  style={{ width: '100%' }}
+                  onClick={handleCalculateBudget}
+                  type="button"
+                >
+                  Calculate My Budget
+                </button>
+              </div>
+
+              {/* ── RIGHT: Results (appears after calculation) ── */}
+              {budgetCalculated && readinessScore && (
+                <div className="sw-budget-results" style={{ animation: 'fadeSlideUp 0.4s ease' }}>
+                  {/* Financial Readiness Score Gauge */}
+                  <div className="sw-card sw-readiness-card">
+                    <h3>Financial Readiness Score</h3>
+                    <div className="sw-gauge-container">
+                      <svg width="140" height="140" viewBox="0 0 140 140" className="sw-gauge-svg">
+                        <circle
+                          cx="70"
+                          cy="70"
+                          r={GAUGE_RADIUS}
+                          fill="none"
+                          stroke="var(--color-border-light)"
+                          strokeWidth="10"
+                          className="gauge-bg"
+                        />
+                        <circle
+                          cx="70"
+                          cy="70"
+                          r={GAUGE_RADIUS}
+                          fill="none"
+                          stroke={readinessScore.color || 'var(--color-primary)'}
+                          strokeWidth="10"
+                          strokeDasharray={GAUGE_CIRCUMFERENCE}
+                          strokeDashoffset={GAUGE_CIRCUMFERENCE - (readinessScore.score / 100) * GAUGE_CIRCUMFERENCE}
+                          strokeLinecap="round"
+                          transform="rotate(-90 70 70)"
+                          className="gauge-fill"
+                          style={{ transition: 'stroke-dashoffset 1s ease' }}
+                        />
+                        <text
+                          x="70"
+                          y="66"
+                          textAnchor="middle"
+                          className="gauge-value"
+                          style={{ fontSize: '28px', fontWeight: 800, fill: readinessScore.color || 'var(--color-primary)' }}
+                        >
+                          {readinessScore.score}
+                        </text>
+                        <text
+                          x="70"
+                          y="86"
+                          textAnchor="middle"
+                          className="gauge-label"
+                          style={{ fontSize: '11px', fontWeight: 600, fill: 'var(--color-text-secondary)' }}
+                        >
+                          {readinessScore.level || (
+                            readinessScore.score >= 80 ? 'Excellent' :
+                            readinessScore.score >= 60 ? 'Good' :
+                            readinessScore.score >= 40 ? 'Fair' : 'Needs Work'
+                          )}
+                        </text>
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* AI Insights Panel */}
+                  <div className="sw-card sw-insights-card">
+                    <h3>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                      </svg>
+                      AI Insights
+                    </h3>
+                    <div className="sw-insights-list">
+                      {readinessInsights.map((insight, i) => (
+                        <div key={i} className="sw-insight-item">
+                          <span className="sw-insight-icon">
+                            {insight.type === 'positive' && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                <path d="M22 4L12 14.01l-3-3" />
+                              </svg>
+                            )}
+                            {insight.type === 'warning' && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                              </svg>
+                            )}
+                            {insight.type === 'info' && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4M12 8h.01" />
+                              </svg>
+                            )}
+                            {!insight.type && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4M12 8h.01" />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="sw-insight-text">{insight.text || insight.message || insight}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Premium teaser */}
+                    <div className="sw-premium-teaser">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      <span>Unlock Premium Insights</span>
+                    </div>
+                  </div>
+
+                  {/* Your Numbers Summary */}
+                  <div className="sw-card sw-numbers-card">
+                    <h3>Your Numbers</h3>
+                    <div className="sw-numbers-hero">
+                      <span className="sw-numbers-label">Max Budget</span>
+                      <span className="sw-numbers-value">{fmt(maxBudget)}</span>
+                    </div>
+
+                    {monthlyBreakdown && (
+                      <>
+                        <div className="sw-numbers-monthly">
+                          <span className="sw-numbers-label">Monthly Payment</span>
+                          <span className="sw-numbers-monthly-value">
+                            {fmt(monthlyBreakdown.total || monthlyBreakdown.monthlyPayment)}
+                          </span>
+                        </div>
+
+                        <div className="sw-breakdown-rows">
+                          {monthlyBreakdown.principalInterest != null && (
+                            <div className="sw-cb-row">
+                              <span>Principal & Interest</span>
+                              <span>{fmt(monthlyBreakdown.principalInterest)}</span>
+                            </div>
+                          )}
+                          {monthlyBreakdown.propertyTax != null && (
+                            <div className="sw-cb-row">
+                              <span>Property Tax</span>
+                              <span>{fmt(monthlyBreakdown.propertyTax)}</span>
+                            </div>
+                          )}
+                          {monthlyBreakdown.insurance != null && (
+                            <div className="sw-cb-row">
+                              <span>Insurance</span>
+                              <span>{fmt(monthlyBreakdown.insurance)}</span>
+                            </div>
+                          )}
+                          {monthlyBreakdown.pmi != null && monthlyBreakdown.pmi > 0 && (
+                            <div className="sw-cb-row">
+                              <span>PMI</span>
+                              <span>{fmt(monthlyBreakdown.pmi)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {readinessScore && readinessScore.breakdown && readinessScore.breakdown.dti != null && (
+                          <div className="sw-dti-row">
+                            <span>DTI Ratio</span>
+                            <span className="sw-dti-value">
+                              {typeof readinessScore.breakdown.dti === 'number'
+                                ? `${(readinessScore.breakdown.dti * 100).toFixed(1)}%`
+                                : `${readinessScore.breakdown.dti}%`}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────────────
+            STEP 2: MATCH (Smart Home Search)
+            ───────────────────────────────────────────────────────────────────── */}
+        {currentStep === 1 && (
+          <>
+            <div className="sw-header">
+              <h2>Find Your Match</h2>
+              <p>
+                Search for homes
+                {maxBudget ? ` (budget up to ${fmt(maxBudget)})` : ''}
+              </p>
+            </div>
+
+            {/* Search Bar */}
+            <div className="sw-card sw-card-full" style={{ marginBottom: 20 }}>
+              <div className="sw-search-row">
+                <div className="sw-field" style={{ flex: 1 }}>
+                  <label className="input-label" htmlFor="sw-city">City</label>
+                  <input
+                    id="sw-city"
+                    className="input-field"
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Austin"
+                    aria-label="City name"
+                  />
+                </div>
+                <div className="sw-field" style={{ flex: '0 0 120px' }}>
+                  <label className="input-label" htmlFor="sw-state">State</label>
+                  <input
+                    id="sw-state"
+                    className="input-field"
+                    type="text"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    placeholder="e.g. TX"
+                    maxLength={2}
+                    aria-label="State code"
+                  />
+                </div>
+                <div className="sw-field" style={{ flex: '0 0 100px' }}>
+                  <label className="input-label" htmlFor="sw-beds">Beds</label>
+                  <select
+                    id="sw-beds"
+                    className="input-field"
+                    value={beds}
+                    onChange={(e) => setBeds(e.target.value)}
+                    aria-label="Number of bedrooms"
+                  >
+                    <option value="">Any</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5+</option>
+                  </select>
+                </div>
+                <div className="sw-field" style={{ flex: '0 0 100px' }}>
+                  <label className="input-label" htmlFor="sw-baths">Baths</label>
+                  <select
+                    id="sw-baths"
+                    className="input-field"
+                    value={baths}
+                    onChange={(e) => setBaths(e.target.value)}
+                    aria-label="Number of bathrooms"
+                  >
+                    <option value="">Any</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3+</option>
+                  </select>
+                </div>
+                <button
+                  className="btn btn-primary sw-search-btn"
+                  onClick={handleMatchSearch}
+                  disabled={matchLoading || !city.trim() || !state.trim()}
+                  type="button"
+                >
+                  {matchLoading ? (
+                    <><span className="sw-spinner" /> Searching...</>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      Search
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Results Header */}
+            {!matchLoading && matchResults.length > 0 && (
+              <div className="sw-match-header">
+                <div className="sw-match-count">
+                  <strong>{matchResults.length}</strong> homes in {city}
+                  {getBuyersLooking && (
+                    <span className="badge badge-primary sw-buyers-badge">
+                      {getBuyersLooking(city)} buyers looking
+                    </span>
+                  )}
+                </div>
+                <button
+                  className={`btn ${compareMode ? 'btn-primary' : 'btn-outline'} sw-compare-toggle`}
+                  onClick={() => setCompareMode(!compareMode)}
+                  type="button"
+                >
+                  Compare ({selectedListings.length}/3)
+                </button>
+              </div>
+            )}
+
+            {/* Loading skeletons */}
+            {matchLoading && (
+              <div className="sw-match-grid">
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <div key={n} className="sw-match-card sw-skeleton-card">
+                    <div className="sw-mc-image sw-skeleton-shimmer" />
+                    <div className="sw-mc-body">
+                      <div className="sw-skeleton-line sw-skeleton-shimmer" style={{ width: '60%', height: 20 }} />
+                      <div className="sw-skeleton-line sw-skeleton-shimmer" style={{ width: '40%', height: 14, marginTop: 8 }} />
+                      <div className="sw-skeleton-line sw-skeleton-shimmer" style={{ width: '80%', height: 12, marginTop: 6 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Results Grid */}
+            {!matchLoading && matchResults.length > 0 && (
+              <div className="sw-match-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+                {matchResults.map((listing) => {
+                  const badges = generateBadges ? generateBadges(listing) : [];
+                  const selected = isSelected(listing);
+                  const estMonthly = maxBudget && listing.price
+                    ? Math.round(listing.price * 0.006)
+                    : null;
+
+                  return (
+                    <div
+                      key={listing.property_id}
+                      className={`sw-match-card ${selected ? 'selected' : ''}`}
+                      onClick={() => {
+                        if (compareMode) {
+                          toggleListing(listing);
+                        } else {
+                          setQuickViewListing(listing);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (compareMode) {
+                            toggleListing(listing);
+                          } else {
+                            setQuickViewListing(listing);
+                          }
+                        }
+                      }}
+                      aria-label={`${listing.address?.full || 'Home'} - ${fmt(listing.price)}`}
+                    >
+                      <div className="sw-mc-image">
+                        {listing.thumbnail || listing.photo ? (
+                          <img
+                            src={listing.thumbnail || listing.photo}
+                            alt={listing.address?.full || 'Home'}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="sw-mc-noimg">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4">
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* Badges overlay */}
+                        {badges.length > 0 && (
+                          <div className="sw-mc-badges">
+                            {badges.map((badge, bi) => (
+                              <span key={bi} className={`badge sw-badge-${badge.type || 'default'}`}>
+                                {badge.label || badge}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Selected checkmark */}
+                        {selected && (
+                          <div className="sw-mc-check">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* Heart icon (when not comparing) */}
+                        {!compareMode && (
+                          <button
+                            className="sw-mc-heart"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleListing(listing);
+                            }}
+                            aria-label={selected ? 'Remove from selection' : 'Add to selection'}
+                            type="button"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill={selected ? '#ef4444' : 'none'} stroke={selected ? '#ef4444' : '#fff'} strokeWidth="2">
+                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="sw-mc-body">
+                        <div className="sw-mc-price">{fmt(listing.price)}</div>
+                        <div className="sw-mc-details">
+                          {listing.beds} bd | {listing.baths} ba
+                          {listing.sqft ? ` | ${Number(listing.sqft).toLocaleString()} sqft` : ''}
+                        </div>
+                        <div className="sw-mc-address">
+                          {listing.address?.full || listing.address || 'Address unavailable'}
+                        </div>
+                        {estMonthly && (
+                          <div className="sw-mc-est-monthly badge badge-primary" style={{ marginTop: 6, fontSize: '0.72rem' }}>
+                            Est. {fmt(estMonthly)}/mo
+                          </div>
+                        )}
+                        <button
+                          className="sw-mc-why-link"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuickViewListing(listing);
+                          }}
+                          type="button"
+                        >
+                          Why this matches
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!matchLoading && matchResults.length === 0 && city && state && (
+              <div className="sw-empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+                <p>No homes found. Try a different city or adjust your filters.</p>
+              </div>
+            )}
+
+            {/* Quick View Modal */}
+            {quickViewListing && (
+              <div className="modal-overlay" onClick={() => setQuickViewListing(null)} role="dialog" aria-modal="true">
+                <div className="modal-content sw-quickview-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h3>Property Details</h3>
+                    <button className="modal-close" onClick={() => setQuickViewListing(null)} type="button" aria-label="Close">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    {(quickViewListing.thumbnail || quickViewListing.photo) && (
+                      <img
+                        src={quickViewListing.thumbnail || quickViewListing.photo}
+                        alt={quickViewListing.address?.full || 'Home'}
+                        className="sw-qv-image"
+                      />
+                    )}
+                    <div className="sw-qv-info">
+                      <div className="sw-qv-price">{fmt(quickViewListing.price)}</div>
+                      <div className="sw-qv-address">
+                        {quickViewListing.address?.full || quickViewListing.address || 'Address unavailable'}
+                      </div>
+                      <div className="sw-qv-details">
+                        {quickViewListing.beds} bd | {quickViewListing.baths} ba
+                        {quickViewListing.sqft ? ` | ${Number(quickViewListing.sqft).toLocaleString()} sqft` : ''}
+                      </div>
+                    </div>
+
+                    {/* Why This Matches panel */}
+                    {(() => {
+                      const matchExplanation = generateMatchExplanation
+                        ? generateMatchExplanation({
+                            listing: quickViewListing,
+                            maxBudget: maxBudget,
+                            preferences: { beds, baths, city },
+                          })
+                        : null;
+
+                      return matchExplanation ? (
+                        <div className="sw-qv-match-panel">
+                          <h4>Why This Matches</h4>
+                          {matchExplanation.matchScore != null && (
+                            <div className="sw-qv-match-score">
+                              <svg width="60" height="60" viewBox="0 0 60 60">
+                                <circle cx="30" cy="30" r="24" fill="none" stroke="var(--color-border-light)" strokeWidth="5" />
+                                <circle
+                                  cx="30"
+                                  cy="30"
+                                  r="24"
+                                  fill="none"
+                                  stroke="var(--color-primary)"
+                                  strokeWidth="5"
+                                  strokeDasharray={2 * Math.PI * 24}
+                                  strokeDashoffset={(2 * Math.PI * 24) - (matchExplanation.matchScore / 100) * (2 * Math.PI * 24)}
+                                  strokeLinecap="round"
+                                  transform="rotate(-90 30 30)"
+                                />
+                                <text x="30" y="34" textAnchor="middle" style={{ fontSize: '14px', fontWeight: 700, fill: 'var(--color-primary)' }}>
+                                  {matchExplanation.matchScore}
+                                </text>
+                              </svg>
+                            </div>
+                          )}
+                          {matchExplanation.reasons && (
+                            <ul className="sw-qv-reasons">
+                              {matchExplanation.reasons.map((reason, ri) => (
+                                <li key={ri}>{reason}</li>
+                              ))}
+                            </ul>
+                          )}
+                          {matchExplanation.overpriced && (
+                            <div className="sw-qv-overpriced badge" style={{ background: '#fef2f2', color: '#dc2626', marginTop: 8 }}>
+                              Potentially Overpriced
+                            </div>
+                          )}
+                        </div>
+                      ) : null;
+                    })()}
+
+                    <div className="sw-qv-actions">
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          toggleListing(quickViewListing);
+                          setQuickViewListing(null);
+                        }}
+                        type="button"
+                      >
+                        {isSelected(quickViewListing) ? 'Remove This Home' : 'Select This Home'}
+                      </button>
+                      <Link
+                        to={`/listing/${quickViewListing.property_id}`}
+                        className="btn btn-outline"
+                        onClick={() => setQuickViewListing(null)}
+                      >
+                        View Full Details
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Compare Modal */}
+            {compareMode && selectedListings.length >= 2 && (
+              <div className="sw-compare-panel" style={{ marginTop: 24 }}>
+                <div className="sw-card sw-card-full">
+                  <h3>Compare Selected Homes</h3>
+                  <div className="sw-compare-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Feature</th>
+                          {selectedListings.map((l) => (
+                            <th key={l.property_id}>
+                              {l.address?.full
+                                ? l.address.full.split(',')[0]
+                                : `Home ${selectedListings.indexOf(l) + 1}`}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Photo</td>
+                          {selectedListings.map((l) => (
+                            <td key={l.property_id}>
+                              {(l.thumbnail || l.photo) ? (
+                                <img
+                                  src={l.thumbnail || l.photo}
+                                  alt=""
+                                  style={{ width: 100, height: 66, objectFit: 'cover', borderRadius: 8 }}
+                                />
+                              ) : (
+                                <span style={{ color: 'var(--color-text-light)' }}>No photo</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td>Price</td>
+                          {selectedListings.map((l) => {
+                            const prices = selectedListings.map((s) => s.price || Infinity);
+                            const minPrice = Math.min(...prices);
+                            return (
+                              <td
+                                key={l.property_id}
+                                style={l.price === minPrice ? { background: 'rgba(16,185,129,0.08)' } : {}}
+                              >
+                                <strong>{fmt(l.price)}</strong>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr>
+                          <td>Beds</td>
+                          {selectedListings.map((l) => {
+                            const vals = selectedListings.map((s) => s.beds || 0);
+                            const maxVal = Math.max(...vals);
+                            return (
+                              <td
+                                key={l.property_id}
+                                style={l.beds === maxVal ? { background: 'rgba(16,185,129,0.08)' } : {}}
+                              >
+                                {l.beds}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr>
+                          <td>Baths</td>
+                          {selectedListings.map((l) => {
+                            const vals = selectedListings.map((s) => s.baths || 0);
+                            const maxVal = Math.max(...vals);
+                            return (
+                              <td
+                                key={l.property_id}
+                                style={l.baths === maxVal ? { background: 'rgba(16,185,129,0.08)' } : {}}
+                              >
+                                {l.baths}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr>
+                          <td>Sqft</td>
+                          {selectedListings.map((l) => {
+                            const vals = selectedListings.map((s) => s.sqft || 0);
+                            const maxVal = Math.max(...vals);
+                            return (
+                              <td
+                                key={l.property_id}
+                                style={l.sqft === maxVal ? { background: 'rgba(16,185,129,0.08)' } : {}}
+                              >
+                                {l.sqft ? Number(l.sqft).toLocaleString() : '--'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr>
+                          <td>$/sqft</td>
+                          {selectedListings.map((l) => {
+                            const ppsf = l.sqft && l.price ? Math.round(l.price / l.sqft) : null;
+                            const allPpsf = selectedListings.map((s) => s.sqft && s.price ? s.price / s.sqft : Infinity);
+                            const minPpsf = Math.min(...allPpsf);
+                            return (
+                              <td
+                                key={l.property_id}
+                                style={ppsf && ppsf === Math.round(minPpsf) ? { background: 'rgba(16,185,129,0.08)' } : {}}
+                              >
+                                {ppsf ? `$${ppsf.toLocaleString()}` : '--'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr>
+                          <td>Est. Monthly</td>
+                          {selectedListings.map((l) => {
+                            const monthly = l.price ? Math.round(l.price * 0.006) : null;
+                            return (
+                              <td key={l.property_id}>
+                                {monthly ? fmt(monthly) : '--'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────────────
+            STEP 3: TOUR (Lead Capture + Agent Matching)
+            ───────────────────────────────────────────────────────────────────── */}
+        {currentStep === 2 && (
+          <>
+            <div className="sw-header">
+              <h2>Schedule a Tour</h2>
+              <p>Tell us about yourself and get matched with a top local agent</p>
+            </div>
+
+            <div className="sw-two-col">
+              {/* ── LEFT: Tour Form ── */}
+              <div className="sw-card">
+                <h3>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  Request a Tour
+                </h3>
+
+                {tourSubmitted ? (
+                  <div className="sw-success-card" style={{ padding: '32px 16px', textAlign: 'center' }}>
+                    <div className="sw-success-icon">
+                      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <path d="M22 4L12 14.01l-3-3" />
+                      </svg>
+                    </div>
+                    <h3 style={{ justifyContent: 'center' }}>We got your request!</h3>
+                    <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
+                      A local agent will reach out within 2 hours.
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleTourSubmit}>
+                    {/* Selected homes chips */}
+                    {selectedListings.length > 0 && (
+                      <div className="sw-tour-listings" style={{ marginBottom: 16 }}>
+                        <span className="sw-tl-label">
+                          Selected Homes ({selectedListings.length})
+                        </span>
+                        <div className="sw-tl-chips">
+                          {selectedListings.map((l) => (
+                            <span key={l.property_id} className="sw-tl-chip">
+                              {fmt(l.price)} - {l.address?.full || 'Home'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="sw-form-grid">
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-name">Name *</label>
+                        <input
+                          id="sw-tour-name"
+                          className="input-field"
+                          type="text"
+                          value={tourForm.name}
+                          onChange={(e) => updateTourField('name', e.target.value)}
+                          placeholder="Your full name"
+                          required
+                          aria-required="true"
+                        />
+                      </div>
+
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-email">Email *</label>
+                        <input
+                          id="sw-tour-email"
+                          className="input-field"
+                          type="email"
+                          value={tourForm.email}
+                          onChange={(e) => updateTourField('email', e.target.value)}
+                          placeholder="email@example.com"
+                          required
+                          aria-required="true"
+                        />
+                      </div>
+
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-phone">Phone</label>
+                        <input
+                          id="sw-tour-phone"
+                          className="input-field"
+                          type="tel"
+                          value={tourForm.phone}
+                          onChange={(e) => updateTourField('phone', e.target.value)}
+                          placeholder="(555) 123-4567"
+                        />
+                      </div>
+
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-timeline">Timeline</label>
+                        <select
+                          id="sw-tour-timeline"
+                          className="input-field"
+                          value={tourForm.timeline}
+                          onChange={(e) => updateTourField('timeline', e.target.value)}
+                          aria-label="Tour timeline preference"
+                        >
+                          <option value="">Select timeline</option>
+                          {TOUR_TIMELINE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="sw-checkbox-row">
+                      <label className="sw-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={tourForm.preapproved}
+                          onChange={(e) => updateTourField('preapproved', e.target.checked)}
+                        />
+                        <span className="sw-checkmark" />
+                        I am pre-approved for a mortgage
+                      </label>
+                    </div>
+
+                    <div className="sw-form-grid">
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-date">Preferred Date</label>
+                        <input
+                          id="sw-tour-date"
+                          className="input-field"
+                          type="date"
+                          value={tourForm.preferredDate}
+                          onChange={(e) => updateTourField('preferredDate', e.target.value)}
+                          aria-label="Preferred tour date"
+                        />
+                      </div>
+
+                      <div className="sw-field">
+                        <label className="input-label" htmlFor="sw-tour-time">Preferred Time</label>
+                        <select
+                          id="sw-tour-time"
+                          className="input-field"
+                          value={tourForm.preferredTime}
+                          onChange={(e) => updateTourField('preferredTime', e.target.value)}
+                          aria-label="Preferred tour time"
+                        >
+                          <option value="">Select time</option>
+                          {TIME_SLOTS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="sw-field sw-field-full" style={{ marginTop: 8 }}>
+                      <label className="input-label" htmlFor="sw-tour-msg">Message (optional)</label>
+                      <textarea
+                        id="sw-tour-msg"
+                        className="input-field"
+                        value={tourForm.message}
+                        onChange={(e) => updateTourField('message', e.target.value)}
+                        placeholder="Anything else you'd like us to know?"
+                        rows={3}
+                      />
+                    </div>
+
+                    <button
+                      className="btn btn-gradient"
+                      style={{ width: '100%', marginTop: 16 }}
+                      type="submit"
+                      disabled={tourSubmitting}
+                    >
+                      {tourSubmitting ? (
+                        <><span className="sw-spinner" /> Submitting...</>
+                      ) : (
+                        'Request Tour'
+                      )}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* ── RIGHT: Matched Agents ── */}
+              <div className="sw-tour-right">
+                <div className="sw-card">
+                  <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Your Matched Agents
+                  </h3>
+
+                  {matchedAgents && matchedAgents.length > 0 ? (
+                    <div className="sw-agents-list">
+                      {matchedAgents.slice(0, 3).map((agent, ai) => (
+                        <div key={ai} className="sw-agent-card">
+                          <div className="sw-agent-header">
+                            <div
+                              className="sw-agent-avatar"
+                              style={{ background: `hsl(${ai * 120}, 55%, 55%)` }}
+                            >
+                              {(agent.name || 'Agent')
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </div>
+                            <div className="sw-agent-info">
+                              <div className="sw-agent-name">{agent.name || 'Agent'}</div>
+                              <div className="sw-agent-title">
+                                {agent.title || 'Real Estate Agent'}
+                                {agent.brokerage ? ` - ${agent.brokerage}` : ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="sw-agent-rating">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span key={star} className="sw-agent-star">
+                                {star <= (agent.rating || 4) ? '\u2605' : '\u2606'}
+                              </span>
+                            ))}
+                            {agent.reviewCount != null && (
+                              <span className="sw-agent-review-count">({agent.reviewCount})</span>
+                            )}
+                          </div>
+
+                          {agent.responseTime && (
+                            <div className="badge badge-primary" style={{ fontSize: '0.7rem', marginTop: 4 }}>
+                              Responds in {agent.responseTime}
+                            </div>
+                          )}
+
+                          {agent.matchReasons && agent.matchReasons.length > 0 && (
+                            <ul className="sw-agent-reasons">
+                              {agent.matchReasons.map((reason, ri) => (
+                                <li key={ri}>{reason}</li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {agent.score != null && (
+                            <div className="sw-agent-score-bar">
+                              <div
+                                className="sw-agent-score-fill"
+                                style={{ width: `${Math.min(agent.score, 100)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: 'var(--color-text-light)', fontSize: '0.85rem' }}>
+                      Complete the search step to see matched agents.
+                    </p>
+                  )}
+
+                  {/* How it works / monetization hook */}
+                  <div className="sw-agent-connect-section">
+                    <div className="badge" style={{ marginBottom: 8 }}>How it works</div>
+                    <p className="sw-agent-connect-text">
+                      HomeMatch connects you with top-rated local agents. Our referral model means
+                      you get expert guidance at no extra cost.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Offer Strength Card */}
+                {offerStrength && (
+                  <div className="sw-card" style={{ marginTop: 16 }}>
+                    <h3>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                      </svg>
+                      Offer Strength
+                    </h3>
+                    <div className="sw-offer-strength">
+                      <div className="sw-offer-gauge">
+                        <svg width="80" height="80" viewBox="0 0 80 80">
+                          <circle cx="40" cy="40" r="32" fill="none" stroke="var(--color-border-light)" strokeWidth="6" />
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="32"
+                            fill="none"
+                            stroke={
+                              offerStrength.score >= 80 ? '#10b981' :
+                              offerStrength.score >= 60 ? '#3b82f6' :
+                              offerStrength.score >= 40 ? '#f59e0b' : '#ef4444'
+                            }
+                            strokeWidth="6"
+                            strokeDasharray={2 * Math.PI * 32}
+                            strokeDashoffset={(2 * Math.PI * 32) - (offerStrength.score / 100) * (2 * Math.PI * 32)}
+                            strokeLinecap="round"
+                            transform="rotate(-90 40 40)"
+                            style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                          />
+                          <text x="40" y="44" textAnchor="middle" style={{ fontSize: '18px', fontWeight: 700, fill: 'var(--color-text)' }}>
+                            {offerStrength.score}
+                          </text>
+                        </svg>
+                      </div>
+                      <div className={`badge sw-offer-level-badge ${
+                        offerStrength.level === 'Strong' ? 'badge-success' :
+                        offerStrength.level === 'Competitive' ? 'badge-primary' :
+                        offerStrength.level === 'Moderate' ? 'badge-warning' : 'badge-danger'
+                      }`}>
+                        {offerStrength.level || 'Moderate'}
+                      </div>
+                      {offerStrength.tips && offerStrength.tips.length > 0 && (
+                        <ul className="sw-offer-tips">
+                          {offerStrength.tips.map((tip, ti) => (
+                            <li key={ti}>{tip}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────────────
+            STEP 4: MOVE (Plan Ahead Dashboard)
+            ───────────────────────────────────────────────────────────────────── */}
+        {currentStep === 3 && (
+          <>
+            <div className="sw-header">
+              <h2>Plan Your Move</h2>
+              <p>Get a cost estimate, checklist, and closing timeline</p>
+            </div>
+
+            {/* Selected Home Banner */}
+            {firstSelected && (
+              <div className="sw-selected-home">
+                {(firstSelected.thumbnail || firstSelected.photo) && (
+                  <img src={firstSelected.thumbnail || firstSelected.photo} alt="" />
+                )}
+                <div className="sw-sh-info">
+                  <div className="sw-sh-price">{fmt(firstSelected.price)}</div>
+                  <div className="sw-sh-address">
+                    {firstSelected.address?.full || firstSelected.address || 'Address'}
+                  </div>
+                  <div className="sw-sh-details">
+                    {firstSelected.beds} bd | {firstSelected.baths} ba
+                    {firstSelected.sqft ? ` | ${Number(firstSelected.sqft).toLocaleString()} sqft` : ''}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="sw-two-col">
+              {/* ── LEFT: Closing Timeline ── */}
+              <div className="sw-card">
+                <h3>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  Closing Timeline
+                </h3>
+
+                <div className="sw-closing-progress">
+                  <div className="sw-closing-progress-bar">
+                    <div
+                      className="sw-closing-progress-fill"
+                      style={{ width: `${closingProgress}%`, transition: 'width 0.3s ease' }}
+                    />
+                  </div>
+                  <span className="sw-closing-progress-label">{closingProgress}% complete</span>
+                </div>
+
+                <div className="sw-closing-checklist">
+                  {closingChecklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`sw-closing-item ${item.status === 'completed' ? 'completed' : ''}`}
+                    >
+                      <label className="sw-checkbox" style={{ flex: 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={item.status === 'completed'}
+                          onChange={() => toggleClosingItem(item.id)}
+                        />
+                        <span className="sw-checkmark" />
+                        <span className="sw-closing-item-label">{item.label}</span>
+                      </label>
+                      <span className="sw-closing-item-timeline">{item.timeline}</span>
+                      <span className={`badge ${item.status === 'completed' ? 'badge-success' : 'badge-secondary'}`} style={{ fontSize: '0.65rem' }}>
+                        {item.status === 'completed' ? 'Done' : 'Pending'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── RIGHT: Move Planner ── */}
+              <div className="sw-card">
+                <h3>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="1" y="3" width="15" height="13" />
+                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                  </svg>
+                  Move Planner
+                </h3>
+
+                {moveLoading && (
+                  <div className="sw-loading-state compact">
+                    <span className="sw-spinner lg" />
+                    <p>Loading move details...</p>
+                  </div>
+                )}
+
+                {!moveLoading && moveEstimate && (
+                  <div className="sw-move-result">
+                    {moveEstimate.estimatedCostRange && (
+                      <div className="sw-move-cost">
+                        <span className="sw-mc-range">
+                          {fmt(moveEstimate.estimatedCostRange.low)} - {fmt(moveEstimate.estimatedCostRange.high)}
+                        </span>
+                        <span className="sw-mc-label">Estimated Moving Cost</span>
+                      </div>
+                    )}
+                    {moveEstimate.totalEstimate != null && !moveEstimate.estimatedCostRange && (
+                      <div className="sw-move-cost">
+                        <span className="sw-mc-range">{fmt(moveEstimate.totalEstimate)}</span>
+                        <span className="sw-mc-label">Estimated Moving Cost</span>
+                      </div>
+                    )}
+                    {moveEstimate.recommendedMoveType && (
+                      <div className="sw-move-type-badge">
+                        {moveEstimate.recommendedMoveType.replace(/_/g, ' ')}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!moveLoading && movePlan && (
+                  <div className="sw-checklist" style={{ marginTop: 16 }}>
+                    {(movePlan.timeline || movePlan.checklist || []).map((item, i) => (
+                      <div key={i} className="sw-cl-item">
+                        <div className="sw-cl-when">{item.when || item.title || `Week ${i + 1}`}</div>
+                        <ul className="sw-cl-tasks">
+                          {(item.tasks || item.items || []).map((task, j) => (
+                            <li key={j}>{typeof task === 'string' ? task : task.text || task.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!moveLoading && !moveEstimate && !movePlan && (
+                  <p style={{ color: 'var(--color-text-light)', fontSize: '0.85rem' }}>
+                    Move data will load automatically.
+                  </p>
+                )}
+
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginTop: 16 }}
+                  onClick={() => setShowShareCard(true)}
+                  type="button"
+                >
+                  Export Buyer Report
+                </button>
+              </div>
+            </div>
+
+            {/* Share Card */}
+            {showShareCard && (
+              <div className="modal-overlay" onClick={() => setShowShareCard(false)} role="dialog" aria-modal="true">
+                <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                  <div className="modal-header">
+                    <h3>Buyer Report</h3>
+                    <button className="modal-close" onClick={() => setShowShareCard(false)} type="button" aria-label="Close">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    <div className="sw-share-card-content">
+                      <div className="sw-share-row">
+                        <span className="sw-share-label">Buyer</span>
+                        <span className="sw-share-value">{tourForm.name || 'Not provided'}</span>
+                      </div>
+                      <div className="sw-share-row">
+                        <span className="sw-share-label">Readiness Score</span>
+                        <span className="sw-share-value" style={{ fontWeight: 700, color: readinessScore?.color }}>
+                          {readinessScore ? readinessScore.score : '--'}/100
+                        </span>
+                      </div>
+                      <div className="sw-share-row">
+                        <span className="sw-share-label">Max Budget</span>
+                        <span className="sw-share-value">{fmt(maxBudget)}</span>
+                      </div>
+                      <div className="sw-share-row">
+                        <span className="sw-share-label">Selected Homes</span>
+                        <span className="sw-share-value">{selectedListings.length}</span>
+                      </div>
+                      <div className="sw-share-row">
+                        <span className="sw-share-label">Agent Matched</span>
+                        <span className="sw-share-value">
+                          {matchedAgents.length > 0 ? matchedAgents[0].name : 'Pending'}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginTop: 16 }}
+                      onClick={handleCopyShareLink}
+                      type="button"
+                    >
+                      Copy Link
+                    </button>
+                    <p style={{ textAlign: 'center', color: 'var(--color-text-light)', fontSize: '0.78rem', marginTop: 8 }}>
+                      Share this report with your agent or lender.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Premium Upgrade Section */}
+            <div className="sw-premium-section" style={{ marginTop: 24 }}>
+              <div className="sw-card sw-premium-card">
+                <h3>Upgrade to Premium</h3>
+                <div className="sw-premium-price">
+                  <span className="sw-premium-amount">$19</span>
+                  <span className="sw-premium-period">/month</span>
+                </div>
+                <ul className="sw-premium-features">
+                  <li>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    AI Offer Strategy
+                  </li>
+                  <li>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    Market Trend Insights
+                  </li>
+                  <li>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    Priority Agent Response
+                  </li>
+                  <li>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    Buyer Readiness Report
+                  </li>
+                </ul>
+                <button
+                  className="btn btn-gradient"
+                  style={{ width: '100%' }}
+                  onClick={() => setShowPremiumModal(true)}
+                  type="button"
+                >
+                  Start Free Trial
+                </button>
+              </div>
+            </div>
+
+            {/* Premium Modal */}
+            {showPremiumModal && (
+              <div className="modal-overlay" onClick={() => setShowPremiumModal(false)} role="dialog" aria-modal="true">
+                <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+                  <div className="modal-header">
+                    <h3>HomeMatch Premium</h3>
+                    <button className="modal-close" onClick={() => setShowPremiumModal(false)} type="button" aria-label="Close">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="modal-body" style={{ textAlign: 'center' }}>
+                    <div className="sw-premium-modal-price">
+                      <span className="sw-premium-amount" style={{ fontSize: '2.5rem' }}>$19</span>
+                      <span className="sw-premium-period">/mo</span>
+                    </div>
+                    <ul className="sw-premium-features" style={{ textAlign: 'left', margin: '20px 0' }}>
+                      <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        AI-powered offer strategy
+                      </li>
+                      <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        Real-time market trend insights
+                      </li>
+                      <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        Priority response from agents
+                      </li>
+                      <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        Comprehensive buyer report
+                      </li>
+                    </ul>
+                    <button
+                      className="btn btn-gradient"
+                      style={{ width: '100%' }}
+                      onClick={() => {
+                        toast.success('Premium trial started!');
+                        setShowPremiumModal(false);
+                      }}
+                      type="button"
+                    >
+                      Start 14-day Free Trial
+                    </button>
+                    <p style={{ color: 'var(--color-text-light)', fontSize: '0.78rem', marginTop: 10 }}>
+                      No credit card required
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            BOTTOM NAVIGATION
+            ═══════════════════════════════════════════════════════════════════ */}
+        <div className="sw-nav">
+          {/* Back button (hidden on step 0) */}
+          {currentStep > 0 ? (
+            <button className="sw-btn-back" onClick={goPrev} type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {/* Step indicators (4 dots) */}
+          <div className="sw-nav-dots">
+            {STEPS.map((_, i) => (
+              <span
+                key={i}
+                className={`sw-nav-dot ${i === currentStep ? 'active' : ''} ${i < currentStep ? 'completed' : ''}`}
+                aria-label={`Step ${i + 1}`}
+              />
+            ))}
+          </div>
+
+          {/* Next / Finish button */}
+          {currentStep < 3 ? (
+            <button
+              className="sw-btn-next"
+              onClick={goNext}
+              type="button"
+              disabled={
+                (currentStep === 0 && !budgetCalculated) ||
+                (currentStep === 1 && selectedListings.length === 0)
+              }
+            >
+              Next
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              className="sw-btn-finish"
+              onClick={() => navigate('/homes')}
+              type="button"
+            >
+              Finish
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <path d="M22 4L12 14.01l-3-3" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default StartWizard;

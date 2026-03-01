@@ -1,0 +1,306 @@
+/* ─── Verify Tour Page ───────────────────────────────────────────── */
+
+.vt-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-bg, #f8fafc);
+}
+
+.vt-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-lg, 0 10px 40px rgba(0,0,0,0.08));
+  padding: 40px 32px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  animation: vtSlideIn 0.4s ease-out;
+}
+
+@keyframes vtSlideIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Icons ─────────────────────────────────────────────────────── */
+
+.vt-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.vt-icon-tour {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  color: #3b82f6;
+}
+
+.vt-icon-success {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  color: #059669;
+}
+
+.vt-icon-info {
+  background: linear-gradient(135deg, #fefce8, #fef3c7);
+  color: #d97706;
+}
+
+.vt-icon-error {
+  background: linear-gradient(135deg, #fef2f2, #fecaca);
+  color: #dc2626;
+}
+
+/* ─── Typography ────────────────────────────────────────────────── */
+
+.vt-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text, #1e293b);
+  margin: 0 0 8px;
+}
+
+.vt-subtitle {
+  font-size: 15px;
+  color: var(--color-text-secondary, #64748b);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.vt-lead-id {
+  font-size: 12px;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0 0 20px;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.vt-error-text {
+  color: #dc2626;
+}
+
+.vt-fine-print {
+  font-size: 12px;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 20px 0 0;
+  line-height: 1.5;
+}
+
+/* ─── Status Grid ───────────────────────────────────────────────── */
+
+.vt-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.vt-party-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-bg, #f8fafc);
+  transition: all 0.3s ease;
+}
+
+.vt-party-status.confirmed {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.vt-party-status.you {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.vt-party-icon {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.vt-party-status.confirmed .vt-party-icon { color: #059669; }
+.vt-party-status.you .vt-party-icon       { color: #3b82f6; }
+.vt-party-status.pending .vt-party-icon    { color: #94a3b8; }
+
+.vt-party-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text, #1e293b);
+}
+
+.vt-party-state {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vt-party-status.confirmed .vt-party-state { color: #059669; }
+.vt-party-status.you .vt-party-state       { color: #3b82f6; }
+.vt-party-status.pending .vt-party-state   { color: #94a3b8; }
+
+/* ─── Verified Banner ───────────────────────────────────────────── */
+
+.vt-verified-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #059669, #047857);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: var(--radius-lg, 12px);
+  margin: 20px 0;
+  animation: vtPulse 2s ease-in-out infinite;
+}
+
+@keyframes vtPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.3); }
+  50%      { box-shadow: 0 0 0 8px rgba(5, 150, 105, 0); }
+}
+
+/* ─── Confirm Button ────────────────────────────────────────────── */
+
+.vt-confirm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-lg, 12px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.vt-confirm-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+}
+
+.vt-confirm-btn:active {
+  transform: translateY(0);
+}
+
+.vt-retry-btn {
+  background: linear-gradient(135deg, #64748b, #475569);
+  margin-top: 16px;
+}
+
+.vt-retry-btn:hover {
+  background: linear-gradient(135deg, #475569, #334155);
+  box-shadow: 0 4px 16px rgba(71, 85, 105, 0.3);
+}
+
+/* ─── Spinner ───────────────────────────────────────────────────── */
+
+.vt-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--color-border, #e2e8f0);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: vtSpin 0.8s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes vtSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Home Link ─────────────────────────────────────────────────── */
+
+.vt-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--color-primary, #3b82f6);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.vt-home-link:hover {
+  color: var(--color-primary-dark, #2563eb);
+  text-decoration: underline;
+}
+
+/* ─── Dark Mode ─────────────────────────────────────────────────── */
+
+html.dark .vt-icon-tour {
+  background: linear-gradient(135deg, #1e3a5f, #1e40af33);
+}
+
+html.dark .vt-icon-success {
+  background: linear-gradient(135deg, #064e3b, #05966933);
+}
+
+html.dark .vt-icon-info {
+  background: linear-gradient(135deg, #78350f, #d9770633);
+}
+
+html.dark .vt-icon-error {
+  background: linear-gradient(135deg, #7f1d1d, #dc262633);
+}
+
+html.dark .vt-party-status.confirmed {
+  background: #064e3b33;
+  border-color: #065f4660;
+}
+
+html.dark .vt-party-status.you {
+  background: #1e40af33;
+  border-color: #3b82f660;
+}
+
+html.dark .vt-error-text {
+  color: #f87171;
+}
+
+/* ─── Responsive ────────────────────────────────────────────────── */
+
+@media (max-width: 520px) {
+  .vt-card {
+    padding: 28px 20px;
+    border-radius: var(--radius-lg, 12px);
+  }
+
+  .vt-title {
+    font-size: 20px;
+  }
+
+  .vt-subtitle {
+    font-size: 14px;
+  }
+
+  .vt-status-grid {
+    gap: 8px;
+  }
+
+  .vt-party-status {
+    padding: 12px 8px;
+  }
+}

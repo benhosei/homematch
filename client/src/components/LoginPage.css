@@ -1,0 +1,273 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LoginPage.css — Sign in / Sign up page
+   Uses the app's CSS variable design system for dark mode support.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.login-page {
+  min-height: calc(100vh - 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: var(--color-bg, #f8fafc);
+}
+
+.login-card {
+  background: var(--color-card, #ffffff);
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.08));
+  padding: 40px;
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+}
+
+.login-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #64748b);
+  text-decoration: none;
+  margin-bottom: 24px;
+  transition: color 0.2s;
+}
+
+.login-back:hover {
+  color: var(--color-text, #334155);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.login-icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.login-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text, #1e293b);
+  margin: 0 0 8px 0;
+}
+
+.login-subtitle {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #64748b);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+  border: 1px solid #fecaca;
+}
+
+.login-error svg {
+  flex-shrink: 0;
+}
+
+/* Social buttons */
+.login-social {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-btn-google {
+  background: var(--color-card, #ffffff);
+  border: 1.5px solid var(--color-border, #e2e8f0);
+  color: var(--color-text, #334155);
+}
+
+.login-btn-google:hover:not(:disabled) {
+  background: var(--color-border-light, #f8fafc);
+  border-color: var(--color-border, #cbd5e1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.login-btn-apple {
+  background: #000;
+  color: #fff;
+}
+
+.login-btn-apple:hover:not(:disabled) {
+  background: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.login-btn-email {
+  background: linear-gradient(135deg, var(--color-primary, #3b82f6), #2563eb);
+  color: #fff;
+  margin-top: 4px;
+}
+
+.login-btn-email:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* Divider */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0;
+  color: var(--color-text-muted, #94a3b8);
+  font-size: 0.8rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-light, #e2e8f0);
+}
+
+/* Email form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #475569);
+}
+
+.login-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: var(--color-text, #1e293b);
+  background: var(--color-card, #ffffff);
+  transition: all 0.2s;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.login-input:focus {
+  border-color: var(--color-primary, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.login-input::placeholder {
+  color: var(--color-text-muted, #94a3b8);
+}
+
+/* Toggle */
+.login-toggle {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #64748b);
+  margin: 20px 0 0 0;
+}
+
+.login-toggle button {
+  background: none;
+  border: none;
+  color: var(--color-primary, #3b82f6);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  font-family: inherit;
+}
+
+.login-toggle button:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Loading spinner */
+.login-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: loginSpin 0.6s linear infinite;
+}
+
+@keyframes loginSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Dark mode overrides for error state */
+html.dark .login-error {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+}
+
+html.dark .login-btn-apple {
+  background: #1e293b;
+  border: 1px solid var(--color-border, #334155);
+}
+
+html.dark .login-btn-apple:hover:not(:disabled) {
+  background: #334155;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Responsive — 480px
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 28px 20px;
+    border-radius: var(--radius-md, 12px);
+  }
+
+  .login-header h1 {
+    font-size: 1.3rem;
+  }
+}

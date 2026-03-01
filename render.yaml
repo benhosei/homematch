@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: homematch-api
+    runtime: node
+    region: oregon
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RAPIDAPI_HOST
+        value: realty-in-us.p.rapidapi.com
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        value: "HomeMatch <onboarding@resend.dev>"
+      - key: APP_URL
+        value: https://homematch.app
+      - key: NOTIFICATION_EMAIL
+        sync: false

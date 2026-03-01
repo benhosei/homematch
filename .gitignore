@@ -1,0 +1,8 @@
+node_modules/
+.env
+client/build/
+.DS_Store
+serviceAccountKey.json
+homematch-lovable/
+.claude/
+*.bak

@@ -1,0 +1,166 @@
+/* ═══════════════════════════════════════════════════════════════════
+   CurrencySlider + DownPaymentSelector styles
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cs-display {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-primary, #3b82f6);
+  padding: 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.cs-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-slider-row .cs-slider {
+  flex: 1;
+}
+
+.cs-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-border, #d1d5db);
+  background: var(--color-card, #fff);
+  color: var(--color-text, #1e293b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.cs-stepper:hover:not(:disabled) {
+  border-color: var(--color-primary, #3b82f6);
+  color: var(--color-primary, #3b82f6);
+}
+
+.cs-stepper:active:not(:disabled) {
+  transform: scale(0.92);
+  background: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary, #3b82f6);
+  color: #fff;
+}
+
+.cs-stepper:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Preset Chips ───────────────────────────────────── */
+
+.cs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cs-chip {
+  padding: 5px 12px;
+  border-radius: 100px;
+  border: 1.5px solid var(--color-border, #d1d5db);
+  background: var(--color-card, #fff);
+  color: var(--color-text, #374151);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.cs-chip:hover {
+  border-color: var(--color-primary, #3b82f6);
+  color: var(--color-primary, #3b82f6);
+}
+
+.cs-chip-active {
+  background: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary, #3b82f6);
+  color: #fff;
+}
+
+.cs-chip-active:hover {
+  color: #fff;
+}
+
+/* ── DownPaymentSelector extras ─────────────────────── */
+
+.dps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dps-display {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-primary, #3b82f6);
+  padding: 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.dps-display .dps-pct {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #6b7280);
+  margin-left: 6px;
+}
+
+.dps-mode-label {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #94a3b8);
+  text-align: center;
+  margin-top: -4px;
+}
+
+.dps-percent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* ── Responsive ─────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .cs-display,
+  .dps-display {
+    font-size: 1.3rem;
+  }
+
+  .cs-stepper {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+  }
+
+  .cs-chip {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+  }
+}

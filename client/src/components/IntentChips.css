@@ -1,0 +1,171 @@
+.intent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  animation: fadeSlideUp 0.3s ease;
+}
+
+.intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+
+.intent-chip-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.intent-chip-label {
+  white-space: nowrap;
+}
+
+.intent-chip-value {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.intent-chip-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  opacity: 0.5;
+  transition: all var(--transition);
+}
+
+.intent-chip-remove:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.15);
+  transform: scale(1.1);
+}
+
+/* Color variants */
+.chip-location {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.chip-budget {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.chip-beds {
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+.chip-baths {
+  background: rgba(6, 182, 212, 0.1);
+  color: #0891b2;
+  border-color: rgba(6, 182, 212, 0.18);
+}
+
+.chip-type {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+.chip-feature {
+  background: rgba(236, 72, 153, 0.1);
+  color: #db2777;
+  border-color: rgba(236, 72, 153, 0.18);
+}
+
+.chip-musthave {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+.chip-default {
+  background: rgba(100, 116, 139, 0.1);
+  color: var(--color-text-secondary);
+  border-color: rgba(100, 116, 139, 0.15);
+}
+
+/* Dark variant (for use inside dark hero sections) */
+.intent-chips--dark .intent-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.intent-chips--dark .chip-location {
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+}
+
+.intent-chips--dark .chip-budget {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.intent-chips--dark .chip-beds {
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+}
+
+.intent-chips--dark .chip-baths {
+  background: rgba(34, 211, 238, 0.15);
+  color: #67e8f9;
+}
+
+.intent-chips--dark .chip-type {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.intent-chips--dark .chip-feature {
+  background: rgba(244, 114, 182, 0.15);
+  color: #f9a8d4;
+}
+
+.intent-chips--dark .chip-musthave {
+  background: rgba(74, 222, 128, 0.15);
+  color: #86efac;
+}
+
+.intent-chips--dark .chip-default {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.intent-chips--dark .intent-chip-remove {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.intent-chips--dark .intent-chip-remove:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .intent-chips {
+    gap: 6px;
+  }
+
+  .intent-chip {
+    padding: 5px 10px;
+    font-size: 0.74rem;
+  }
+}
