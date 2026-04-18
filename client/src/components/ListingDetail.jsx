@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import MatchScore from './MatchScore';
 import { generateMatchExplanation, generateBadges, checkOverpriced } from '../services/aiExplanations';
 import API_BASE from '../utils/apiBase';
@@ -133,6 +133,7 @@ function RenoIcon({ type }) {
 
 function ListingDetail({ listings, onFavorite, onUnfavorite, isFavorite, preferences, onTrackClick }) {
   const { id } = useParams();
+  const location = useLocation();
   const [activePhoto, setActivePhoto] = useState(0);
   const [fullPhotos, setFullPhotos] = useState(null);
   const [photosLoading, setPhotosLoading] = useState(false);
@@ -161,7 +162,8 @@ function ListingDetail({ listings, onFavorite, onUnfavorite, isFavorite, prefere
   const [tourSubmitting, setTourSubmitting] = useState(false);
   const [tourSubmitted, setTourSubmitted] = useState(false);
 
-  const listing = listings.find(l => l.property_id === id);
+  const listing = listings.find(l => l.property_id === id) || location.state?.listing || null;
+  const backPath = location.state?.from || '/start';
 
   // AI Match explanation (client-side, deterministic)
   const matchExplanation = useMemo(() => {
@@ -340,7 +342,7 @@ function ListingDetail({ listings, onFavorite, onUnfavorite, isFavorite, prefere
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <h2>Listing not found</h2>
         <p>This listing may no longer be available.</p>
-        <Link to="/homes" className="btn-back">Back to Search</Link>
+        <Link to={backPath} className="btn-back">Back to Search</Link>
       </div>
     );
   }
@@ -370,7 +372,7 @@ function ListingDetail({ listings, onFavorite, onUnfavorite, isFavorite, prefere
 
   return (
     <div className="listing-detail">
-      <Link to="/homes" className="back-link">
+      <Link to={backPath} className="back-link">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         Back to results
       </Link>

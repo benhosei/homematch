@@ -4,11 +4,7 @@ import './ListingGrid.css';
 
 function ListingGrid({ listings, onFavorite, onUnfavorite, isFavorite, onCardClick }) {
   if (listings.length === 0) {
-    return (
-      <p className="no-results">
-        No listings found. Try adjusting your search criteria.
-      </p>
-    );
+    return null;
   }
 
   return (

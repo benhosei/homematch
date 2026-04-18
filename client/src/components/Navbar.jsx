@@ -99,19 +99,6 @@ function Navbar({ wizardStep = -1, totalSteps = 5, favoritesCount }) {
             </Link>
 
             <Link
-              to="/homes"
-              className={`nav-link ${isActive('/homes') ? 'active' : ''}`}
-              role="menuitem"
-              aria-current={isActive('/homes') ? 'page' : undefined}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.35-4.35" />
-              </svg>
-              Browse
-            </Link>
-
-            <Link
               to="/favorites"
               className={`nav-link ${isActive('/favorites') ? 'active' : ''}`}
               role="menuitem"
@@ -297,18 +284,6 @@ function Navbar({ wizardStep = -1, totalSteps = 5, favoritesCount }) {
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
                 Start
-              </Link>
-
-              <Link
-                to="/homes"
-                className={`mobile-nav-link ${isActive('/homes') ? 'active' : ''}`}
-                onClick={() => setMobileOpen(false)}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.35-4.35" />
-                </svg>
-                Browse
               </Link>
 
               <Link

@@ -179,6 +179,7 @@ function StartWizard() {
   const [showFilters, setShowFilters] = useState(false);
   const [matchResults, setMatchResults] = useState([]);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [selectedCities, setSelectedCities] = useState(savedState.selectedCities || []);
   const [selectedListings, setSelectedListings] = useState(savedState.selectedListings || []);
   const [compareMode, setCompareMode] = useState(false);
@@ -376,6 +377,7 @@ function StartWizard() {
       if (!searchRes.ok) throw new Error(data.error || 'Search failed');
       const results = data.results || [];
       setMatchResults(results);
+      setHasSearched(true);
       toast.success(`Found ${results.length} homes in ${selectedCities.length} ${selectedCities.length === 1 ? 'city' : 'cities'}!`);
     } catch (err) {
       toast.error(err.message || 'Search failed -- try again.');
@@ -470,6 +472,7 @@ function StartWizard() {
       if (!searchRes.ok) throw new Error(data.error || 'Search failed');
       const results = data.results || data.listings || [];
       setMatchResults(results);
+      setHasSearched(true);
       toast.success(`Found ${results.length} homes!`);
     } catch (err) {
       toast.error(err.message || 'Smart search failed -- try again.');
@@ -526,6 +529,7 @@ function StartWizard() {
       if (sfBaths) setBaths(sfBaths);
       setFeatures(sfFeatures);
       setMatchResults(results);
+      setHasSearched(true);
       toast.success(`Found ${results.length} homes in ${cities.length} ${cities.length === 1 ? 'city' : 'cities'}!`);
     } catch (err) {
       toast.error(err.message || 'Search failed -- try again.');
@@ -855,6 +859,7 @@ function StartWizard() {
                       setCity('');
                       setSelectedCities([]);
                       setMatchResults([]);
+                      setHasSearched(false);
                     }}
                     aria-label="Select a state"
                   >
@@ -1303,7 +1308,7 @@ function StartWizard() {
             )}
 
             {/* Empty state */}
-            {!matchLoading && matchResults.length === 0 && city && state && (
+            {!matchLoading && matchResults.length === 0 && hasSearched && (
               <div className="sw-empty-state">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -1484,6 +1489,7 @@ function StartWizard() {
                       </button>
                       <Link
                         to={`/listing/${quickViewListing.property_id}`}
+                        state={{ listing: quickViewListing, from: '/start' }}
                         className="btn btn-outline"
                         onClick={() => setQuickViewListing(null)}
                       >

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 import HomePage from './HomePage';
 import StartWizard from './StartWizard';
@@ -177,37 +177,8 @@ function AppContent() {
           <Route path="/" element={<HomePage />} />
           <Route path="/start" element={<StartWizard />} />
 
-          {/* Browse homes (old search, now secondary) */}
-          <Route
-            path="/homes"
-            element={
-              <div className="main-content">
-                <PreferenceForm
-                  preferences={preferences}
-                  onChange={updatePreferences}
-                  onReset={resetPreferences}
-                  onSearch={handleSearch}
-                  onAISearch={handleAIPromptSearch}
-                  onSaveSearch={saveSearch}
-                  savedSearches={savedSearches}
-                  onDeleteSavedSearch={deleteSavedSearch}
-                  loading={loading}
-                  clickHistory={clickHistory}
-                />
-                <SearchResults
-                  listings={listings}
-                  total={total}
-                  loading={loading}
-                  error={error}
-                  onFavorite={addFavorite}
-                  onUnfavorite={removeFavorite}
-                  isFavorite={isFavorite}
-                  aiNote={lastAINote}
-                  onCardClick={trackClick}
-                />
-              </div>
-            }
-          />
+          {/* Old /homes route — redirect to unified /start */}
+          <Route path="/homes" element={<Navigate to="/start" replace />} />
 
           {/* Listing detail */}
           <Route
